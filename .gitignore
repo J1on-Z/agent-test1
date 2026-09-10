@@ -22,6 +22,9 @@ htmlcov/
 # Claude Code 本机配置（命令权限白名单，随使用变化，不入库）
 .claude/settings.local.json
 
+# 本地 clone 的仓库副本（含 .env 与本机数据，禁止提交）
+agent-test1/
+
 
 # Node
 node_modules/
