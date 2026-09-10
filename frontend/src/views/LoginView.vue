@@ -23,7 +23,6 @@
       </el-form>
       <div class="auth-foot">
         <span>还没有账号？<router-link to="/register">立即注册</router-link></span>
-        <el-text size="small" type="info">演示账号：admin / 123456</el-text>
       </div>
     </el-card>
   </div>
@@ -65,5 +64,5 @@ async function onLogin() {
 .auth-head h2 { margin: 8px 0 4px; font-size: 19px; color: #303133; }
 .auth-head p { color: #909399; font-size: 13px; margin: 0; }
 .auth-btn { width: 100%; }
-.auth-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; font-size: 13px; color: #606266; }
+.auth-foot { display: flex; justify-content: center; align-items: center; margin-top: 14px; font-size: 13px; color: #606266; }
 </style>
