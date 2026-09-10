@@ -50,6 +50,11 @@ reportlab>=4.2           # 仅 scripts/generate_mock_docs.py 生成仿真 PDF �
 # ---------- 测试 ----------
 pytest>=8.3
 pytest-asyncio>=1.0
+pytest-cov>=6.0         # 覆盖率报告（测试报告用）
+
+# ---------- 压力测试（可选，见 压测报告.md） ----------
+locust>=2.30            # 100 并发压测（scripts/locustfile.py）
+psutil>=7.0             # 压测期间资源采样（scripts/sample_resources.py）
 
 # ============================================================
 # 禁止引入清单（生产环境替换方案见 README）：

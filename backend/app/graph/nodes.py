@@ -15,6 +15,7 @@ from langgraph.config import get_stream_writer
 
 from app.config import settings
 from app.services.llm.prompts import NO_CONTEXT_ANSWER, REWRITE_PROMPT, build_messages
+from app.services.llm.qwen import llm_slot
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +64,8 @@ async def rewrite_query(state: dict) -> dict:
         question=question,
     )
     try:
-        resp = await llm.ainvoke(prompt)
+        async with llm_slot():  # 全局并发闸门（与生成请求共用配额）
+            resp = await llm.ainvoke(prompt)
         rewritten = (resp.content or "").strip() or question
     except Exception as e:  # noqa: BLE001 改写是优化步骤，失败降级为原始问题
         logger.warning("query 改写失败，降级使用原始问题: %s", str(e)[:100])
@@ -166,19 +168,22 @@ async def generate(state: dict) -> dict:
 
     async def _stream():
         nonlocal full_text, usage
-        async for chunk in llm.astream(messages):
-            delta = chunk.content
-            if isinstance(delta, str) and delta:
-                full_text += delta
-                _emit({"type": "token", "delta": delta})
-            reasoning = (chunk.additional_kwargs or {}).get("reasoning_content")
-            if reasoning:
-                _emit({"type": "thinking", "delta": reasoning})
-            # usage 可能出现在 usage_metadata 或 response_metadata（网关行为有差异）
-            if chunk.usage_metadata:
-                usage = dict(chunk.usage_metadata)
-            elif (chunk.response_metadata or {}).get("token_usage"):
-                usage = dict(chunk.response_metadata["token_usage"])
+        # 全局并发闸门：整个流式生成期间占用一个槽位，
+        # 100 并发时超出 LLM_MAX_CONCURRENCY 的请求在此排队（而非被 DashScope 拒绝）
+        async with llm_slot():
+            async for chunk in llm.astream(messages):
+                delta = chunk.content
+                if isinstance(delta, str) and delta:
+                    full_text += delta
+                    _emit({"type": "token", "delta": delta})
+                reasoning = (chunk.additional_kwargs or {}).get("reasoning_content")
+                if reasoning:
+                    _emit({"type": "thinking", "delta": reasoning})
+                # usage 可能出现在 usage_metadata 或 response_metadata（网关行为有差异）
+                if chunk.usage_metadata:
+                    usage = dict(chunk.usage_metadata)
+                elif (chunk.response_metadata or {}).get("token_usage"):
+                    usage = dict(chunk.response_metadata["token_usage"])
 
     try:
         await _stream()
@@ -186,7 +191,8 @@ async def generate(state: dict) -> dict:
         if not _is_stream_denied(err):
             raise
         logger.warning("流式调用被网关拒绝，降级为非流式（一次性返回）: %s", str(err)[:120])
-        resp = await llm.ainvoke(messages)
+        async with llm_slot():  # 降级分支同样受并发闸门保护
+            resp = await llm.ainvoke(messages)
         full_text = resp.content or ""
         usage = dict(resp.usage_metadata or {})
         _emit({"type": "token", "delta": full_text})

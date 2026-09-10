@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git grep *)",
+      "Bash(git check-ignore *)",
+      "Bash(./.venv/Scripts/python.exe -m pip install pip-audit -q)",
+      "Bash(PYTHONUTF8=1 ./.venv/Scripts/python.exe -m pip-audit)",
+      "Bash(./.venv/Scripts/python.exe -m pip install pip-audit)",
+      "Bash(./.venv/Scripts/pip-audit.exe --version)",
+      "Bash(PYTHONUTF8=1 ./.venv/Scripts/pip-audit.exe)",
+      "Bash(npm audit *)",
+      "Bash(./.venv/Scripts/python.exe -m pip install locust -q)",
+      "Bash(PYTHONUTF8=1 ./.venv/Scripts/python.exe scripts/prepare_load_users.py)",
+      "Bash(LOAD_WAIT=normal PYTHONUTF8=1 ./.venv/Scripts/locust.exe -f scripts/locustfile.py --host http://127.0.0.1:8000 -u 3 -r 3 -t 40s --headless --only-summary)",
+      "Bash(./.venv/Scripts/python.exe -m pip install psutil -q)",
+      "Bash(./.venv/Scripts/python.exe -c \"import psutil; print\\('psutil', psutil.__version__\\)\")",
+      "Bash(PYTHONUTF8=1 ./.venv/Scripts/python.exe scripts/prepare_load_users.py --tokens-only)",
+      "Bash(PYTHONUTF8=1 ./.venv/Scripts/python.exe -c ' *)",
+      "Bash(PYTHONUTF8=1 ./.venv/Scripts/python.exe scripts/sample_resources.py --duration 780 --out data/load_resources_s1s4.csv)",
+      "Bash(LOAD_WAIT=normal PYTHONUTF8=1 ./.venv/Scripts/locust.exe -f scripts/locustfile.py --host http://127.0.0.1:8000 -u 100 -r 10 -t 5m --headless --csv data/load_s1 --only-summary)",
+      "Bash(LOAD_WAIT=burst PYTHONUTF8=1 ./.venv/Scripts/locust.exe -f scripts/locustfile.py --host http://127.0.0.1:8000 -u 100 -r 100 -t 2m --headless --csv data/load_s4 --only-summary)",
+      "Bash(grep -oE \"\\(OperationalError|database is locked|CancelledError|TimeoutError|RuntimeError|ValueError|IntegrityError\\)[^\\\\\"]{0,60}\" logs/app.log)",
+      "Bash(awk '/^2026-09-10 13:\\(3[6-9]|4[0-8]\\)/' logs/app.log)",
+      "Bash(grep -oE \"\\(OperationalError|database is locked|TimeoutError|QueuePool limit|IntegrityError|ProgrammingError|closed database|CancelledError\\)[^\\\\\"]{0,50}\")",
+      "Bash(LOAD_WAIT=burst PYTHONUTF8=1 ./.venv/Scripts/locust.exe -f scripts/locustfile.py --host http://127.0.0.1:8000 -u 100 -r 100 -t 2m --headless --csv data/load_s4_fixed --only-summary)",
+      "Bash(grep -oE \"\\(QueuePool limit|database is locked|closed database|Timeout|429|403|Unpurchased|AccessDenied|ReadTimeout|ConnectError|RemoteProtocolError|semaphore\\)[^\\\\\"]{0,60}\")",
+      "Bash(grep -oE \"\\(ConnectionResetError|ConnectionAbortedError|WinError [0-9]+\\)[^\\\\\"]{0,80}\" \"C:\\\\Users\\\\PC\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\e----rag---------\\\\b02c8c16-e5ad-4794-8cc2-d746d9fc2bcc\\\\tasks\\\\baaenrqox.output\")",
+      "Bash(LOAD_WAIT=burst PYTHONUTF8=1 ./.venv/Scripts/locust.exe -f scripts/locustfile.py --host http://127.0.0.1:8000 -u 30 -r 30 -t 1m --headless --csv data/load_check30 --only-summary)"
+    ]
+  }
+}

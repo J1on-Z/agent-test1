@@ -3,11 +3,9 @@ import asyncio
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.core.rate_limit import limiter
-from app.database import get_db
 from app.dependencies import get_current_user
 from app.models import User
 from app.schemas.chat import ChatRequest
@@ -82,28 +80,30 @@ async def chat(
     request: Request,
     body: ChatRequest,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
 ):
-    """流式问答：SSE 事件序列 meta → token* → citations → done。"""
-    return _sse_response(chat_service.stream_chat(user, body, db))
+    """流式问答：SSE 事件序列 meta → token* → citations → done。
+
+    注意：不使用请求级 DB 依赖——流式生成持续数十秒，请求级 session 会一直
+    占用连接，100 并发下耗尽连接池（压测实测）。DB 操作由 service 内部用
+    独立短 session 完成。
+    """
+    return _sse_response(chat_service.stream_chat(user, body))
 
 
 @router.post("/messages/{message_id}/regenerate")
 async def regenerate(
     message_id: int,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
 ):
     """重新生成：删除旧回答及之后消息，以同一问题重新流式生成。"""
-    return _sse_response(chat_service.regenerate(user, message_id, db))
+    return _sse_response(chat_service.regenerate(user, message_id))
 
 
 @router.post("/messages/{message_id}/stop")
 async def stop(
     message_id: int,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
 ):
     """停止生成兜底：标记消息为中断（主路径为前端 Abort + 服务端断连检测）。"""
-    await chat_service.mark_interrupted(user, message_id, db)
+    await chat_service.mark_interrupted(user, message_id)
     return {"message": "已停止"}

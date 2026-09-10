@@ -34,13 +34,23 @@ settings.resolve_path(settings.database_url.split("///")[-1]).parent.mkdir(
 def _set_sqlite_pragmas(dbapi_connection, _record) -> None:
     cursor = dbapi_connection.cursor()
     cursor.execute("PRAGMA journal_mode=WAL")
-    cursor.execute("PRAGMA busy_timeout=5000")
+    # 压测实测：100 并发写入时 5s 不够（出现 database is locked），提高到 15s
+    cursor.execute("PRAGMA busy_timeout=15000")
     cursor.execute("PRAGMA foreign_keys=ON")
     cursor.close()
 
 
-# 异步引擎：FastAPI 请求路径
-engine = create_async_engine(_DATABASE_URL, echo=False)
+# 异步引擎：FastAPI 请求路径。
+# 连接池调参依据（100 并发压测）：默认 pool_size=5/max_overflow=10 会在
+# 长耗时请求（LLM 生成数十秒）下耗尽；pool_timeout 从 30s 降到 10s 快速失败，
+# 避免请求长时间挂起。SQLite 本地文件场景下 50 连接上限是安全的。
+engine = create_async_engine(
+    _DATABASE_URL,
+    echo=False,
+    pool_size=20,
+    max_overflow=30,
+    pool_timeout=10,
+)
 event.listens_for(engine.sync_engine, "connect")(_set_sqlite_pragmas)
 
 # 同步引擎：摄入 worker 线程专用

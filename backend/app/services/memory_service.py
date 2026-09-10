@@ -19,23 +19,34 @@ logger = logging.getLogger(__name__)
 
 
 async def get_memory_context(
-    db: AsyncSession, conversation_id: int, exclude_message_id: int | None = None
+    conversation_id: int, exclude_message_id: int | None = None
 ) -> tuple[list[tuple[str, str]], str]:
     """组装进入 LangGraph 的记忆上下文。
+
+    使用独立短生命周期 session（同 cache_service 的理由）：只读查询若复用
+    请求级 session，会把连接一直持有到数十秒后的下次 DB 操作，100 并发耗尽连接池。
+    返回纯数据（不返回 ORM 对象），session 关闭后无 attach 问题。
 
     :param exclude_message_id: 排除指定消息（流式问答时排除刚写入的当前用户问题）
     :return: (窗口消息 [(role, content)], 滚动摘要)
     """
-    conversation = await db.get(Conversation, conversation_id)
-    if conversation is None:
-        return [], ""
-    stmt = select(Message).where(Message.conversation_id == conversation_id)
-    if exclude_message_id is not None:
-        stmt = stmt.where(Message.id != exclude_message_id)
-    rows = list((await db.scalars(stmt.order_by(Message.id.desc()).limit(settings.memory_window_messages))).all())
-    rows.reverse()  # 转为时间正序
-    window = [(m.role, m.content) for m in rows]
-    return window, conversation.summary or ""
+    async with AsyncSessionLocal() as db:
+        conversation = await db.get(Conversation, conversation_id)
+        if conversation is None:
+            return [], ""
+        stmt = select(Message).where(Message.conversation_id == conversation_id)
+        if exclude_message_id is not None:
+            stmt = stmt.where(Message.id != exclude_message_id)
+        rows = list(
+            (
+                await db.scalars(
+                    stmt.order_by(Message.id.desc()).limit(settings.memory_window_messages)
+                )
+            ).all()
+        )
+        window = [(m.role, m.content) for m in rows]
+        window.reverse()  # 转为时间正序
+        return window, conversation.summary or ""
 
 
 async def maybe_update_summary(conversation_id: int) -> None:
@@ -74,11 +85,12 @@ async def _do_summary(db: AsyncSession, conversation: Conversation) -> None:
 
     old_summary = conversation.summary or ""
     try:
-        from app.services.llm.qwen import get_llm
+        from app.services.llm.qwen import get_llm, llm_slot
 
         llm = get_llm(settings.llm_model, thinking=False)
         prompt = SUMMARY_PROMPT.format(old_summary=old_summary, new_messages=new_messages_text)
-        resp = await llm.ainvoke(prompt)
+        async with llm_slot():  # 摘要为后台任务，同样受并发闸门约束
+            resp = await llm.ainvoke(prompt)
         new_summary = (resp.content or "").strip()
         if not new_summary:  # 模型异常时降级为截断拼接
             new_summary = (old_summary + "\n" + new_messages_text)[-800:]

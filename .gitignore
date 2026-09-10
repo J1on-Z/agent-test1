@@ -15,6 +15,11 @@ backend/logs/
 *.db-wal
 *.db-shm
 
+# 测试产物
+.coverage
+htmlcov/
+
+
 # Node
 node_modules/
 dist/

@@ -1,11 +1,12 @@
 """通义千问 LLM 工厂：ChatOpenAI 指向 DashScope compatible-mode 端点。
 
 特性：
-- 全局并发信号量（DashScope 有 RPM/TPM 限速）
+- 全局并发信号量（DashScope 有 RPM/TPM 限速，超出会 429/403）
 - 限流时自动降级到备用模型（LLM_FALLBACK_MODEL）
 - 思考模式（enable_thinking）：reasoning_content 从 additional_kwargs 提取，
   供前端「思考过程」折叠块展示
 """
+import asyncio
 import logging
 import threading
 from functools import lru_cache
@@ -18,8 +19,18 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-# 全局并发信号量：跨请求限制同时进行的 LLM 调用数
-_llm_semaphore = threading.Semaphore(settings.llm_max_concurrency)
+# 全局并发信号量：跨请求限制同时进行的 LLM 调用数。
+# 必须用 asyncio.Semaphore：threading.Semaphore 在异步环境中会阻塞整个事件循环，
+# 导致所有并发请求一起卡死，而不是排队。
+_llm_semaphore = asyncio.Semaphore(settings.llm_max_concurrency)
+
+
+def llm_slot() -> asyncio.Semaphore:
+    """LLM 调用槽位：用 `async with llm_slot():` 包裹每次 LLM 调用。
+
+    并发上限由 LLM_MAX_CONCURRENCY 控制，超出部分排队等待而非被 DashScope 拒绝。
+    """
+    return _llm_semaphore
 
 # 全局用量收集：从回调聚合 token 统计（用于 request_logs / 成本估算）
 _usage_registry: dict[str, dict] = {}
