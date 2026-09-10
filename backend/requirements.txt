@@ -1,0 +1,59 @@
+# ============================================================
+# 电商 RAG 知识库智能问答系统 —— 后端依赖
+# Python 3.14 / Windows 10 验证通过
+# ============================================================
+
+# ---------- Web 框架 ----------
+fastapi>=0.115
+uvicorn>=0.30            # 纯版（Windows 下无 uvloop 收益，不装 [standard]）
+pydantic>=2.12           # cp314 轮子自 2.12 起
+pydantic-settings>=2.6
+python-multipart>=0.0.20 # 文件上传必需
+
+# ---------- 数据库 ----------
+sqlalchemy>=2.0.43       # 2.0.43+ 官方支持 Python 3.14
+aiosqlite>=0.21
+greenlet>=3.2.4          # sqlalchemy async 依赖，cp314 轮子自 3.2.4 起
+
+# ---------- 认证与安全 ----------
+PyJWT>=2.10
+bcrypt>=4.3              # 直接用 bcrypt；禁用停更的 passlib
+
+# ---------- 限流与网络 ----------
+slowapi>=0.1.9
+httpx>=0.28
+tenacity>=9.0
+
+# ---------- LangChain / LangGraph（锁定 1.x 世代） ----------
+langchain>=1.0,<2.0
+langchain-core>=1.0,<2.0
+langchain-openai>=1.0,<2.0       # ChatOpenAI 指向 DashScope compatible-mode 端点
+langchain-text-splitters>=1.0,<2.0
+langgraph>=1.0,<2.0
+
+# ---------- 向量检索（自研：numpy 内存矩阵 + SQLite 持久化） ----------
+# 说明：chromadb 的 chroma-hnswlib 在 Python 3.14/Windows 下 upsert 段错误
+# （已最小复现），故采用自研轻量实现；生产替换 Milvus/Qdrant 见 README
+numpy>=2.0
+
+# ---------- 检索与中文处理 ----------
+rank_bm25>=0.2.2         # 纯 Python
+jieba>=0.42.1            # 纯 Python
+
+# ---------- 文档解析 ----------
+pypdf>=5.0               # 纯 Python
+python-docx>=1.1         # 依赖 lxml>=6.0（cp314 轮子自 6.0 起）
+openpyxl>=3.1
+markdown>=3.7
+reportlab>=4.2           # 仅 scripts/generate_mock_docs.py 生成仿真 PDF 用
+
+# ---------- 测试 ----------
+pytest>=8.3
+pytest-asyncio>=1.0
+
+# ============================================================
+# 禁止引入清单（生产环境替换方案见 README）：
+#   torch / sentence-transformers / faiss-cpu / redis / celery
+#   elasticsearch / passlib
+#   —— rerank/embedding 全部走 DashScope API，本机零模型文件
+# ============================================================
