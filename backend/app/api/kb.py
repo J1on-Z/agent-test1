@@ -47,8 +47,12 @@ async def get_document(
     db: AsyncSession = Depends(get_db),
 ):
     doc, chunks = (await kb_service.get_document_with_chunks(db, document_id)).values()
-    out = DocumentDetailOut.model_validate(doc)
-    out.chunks = [ChunkPreview.model_validate(c) for c in chunks]
+    # 不能直接 model_validate(doc)：from_attributes 会读取 ORM 的 chunks 关系，
+    # 在 async session 下触发懒加载报 MissingGreenlet。先按纯字段模型展开，再手动挂 chunks。
+    out = DocumentDetailOut(
+        **DocumentOut.model_validate(doc).model_dump(),
+        chunks=[ChunkPreview.model_validate(c) for c in chunks],
+    )
     return out
 
 

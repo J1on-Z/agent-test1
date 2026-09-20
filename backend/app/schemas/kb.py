@@ -21,6 +21,8 @@ class DocumentOut(BaseModel):
 
 
 class ChunkPreview(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     chunk_index: int
     content: str
