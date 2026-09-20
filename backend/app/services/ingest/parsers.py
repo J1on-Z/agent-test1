@@ -7,6 +7,7 @@ import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from app.config import settings
 from app.core.exceptions import BizError
 
 logger = logging.getLogger(__name__)
@@ -36,7 +37,12 @@ def parse_file(path: Path, file_type: str) -> tuple[list[ParsedSection], str]:
     parser = _PARSERS[file_type]
     sections = parser(path)
     if not sections or not any(s.text.strip() for s in sections):
-        raise ParseError("未能从文件中提取到任何文本（可能为扫描件或空文件）")
+        hint = (
+            "；可在 .env 设置 OCR_ENABLED=true 自动识别扫描件"
+            if not settings.ocr_enabled
+            else ""
+        )
+        raise ParseError("未能从文件中提取到任何文本（可能为扫描件或空文件）" + hint)
     title = _extract_title(sections, path, file_type)
     return sections, title
 
@@ -48,11 +54,91 @@ def _parse_pdf(path: Path) -> list[ParsedSection]:
 
     reader = PdfReader(str(path))
     sections = []
+    empty_pages: list[int] = []
     for i, page in enumerate(reader.pages):
         text = page.extract_text() or ""
         if text.strip():
             sections.append(ParsedSection(text=text, meta={"page": i + 1}))
+        else:
+            empty_pages.append(i + 1)
+
+    # 扫描件回退：无文字层的页面渲染成图片，交给多模态模型识别（同步，线程池内运行）
+    if empty_pages and settings.ocr_enabled:
+        if len(empty_pages) > settings.ocr_max_pages:
+            raise ParseError(
+                f"扫描页数（{len(empty_pages)} 页）超过 OCR 上限（{settings.ocr_max_pages} 页），"
+                "请拆分文档或调整 OCR_MAX_PAGES"
+            )
+        ocr_sections = _ocr_pdf_pages(path, empty_pages)
+        sections.extend(ocr_sections)
+        sections.sort(key=lambda s: s.meta.get("page", 0))
     return sections
+
+
+def _ocr_pdf_pages(path: Path, pages: list[int]) -> list[ParsedSection]:
+    """渲染指定 PDF 页为图片，逐页调用多模态模型识别文字。"""
+    import base64
+
+    import pymupdf
+
+    logger.info("扫描件 OCR 回退：%s 共 %d 页（模型 %s）", path.name, len(pages), settings.ocr_model)
+    doc = pymupdf.open(str(path))
+    try:
+        out: list[ParsedSection] = []
+        for pno in pages:
+            pix = doc[pno - 1].get_pixmap(dpi=settings.ocr_dpi)
+            b64 = base64.b64encode(pix.tobytes("png")).decode()
+            text = _call_ocr(b64)
+            if text.strip():
+                out.append(ParsedSection(text=text.strip(), meta={"page": pno}))
+            else:
+                logger.warning("OCR 第 %d 页无结果", pno)
+        return out
+    finally:
+        doc.close()
+
+
+def _call_ocr(image_b64: str) -> str:
+    """多模态识别（compatible-mode，图片以 data URL 传入），失败重试一次。"""
+    import httpx
+
+    body = {
+        "model": settings.ocr_model,
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            "请完整识别图片中的所有文字内容（包含表格时按行列输出）。"
+                            "只输出识别出的文字，不要任何解释或补充。"
+                        ),
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/png;base64,{image_b64}"},
+                    },
+                ],
+            }
+        ],
+        "max_tokens": 4096,
+    }
+    last_err = ""
+    for _ in range(2):
+        try:
+            resp = httpx.post(
+                f"{settings.dashscope_base_url}/chat/completions",
+                headers={"Authorization": f"Bearer {settings.dashscope_api_key}"},
+                json=body,
+                timeout=120,
+            )
+            if resp.status_code == 200:
+                return resp.json()["choices"][0]["message"]["content"] or ""
+            last_err = f"HTTP {resp.status_code}: {resp.text[:200]}"
+        except httpx.HTTPError as exc:
+            last_err = str(exc)
+    raise ParseError(f"扫描页 OCR 识别失败（模型 {settings.ocr_model}）：{last_err}")
 
 
 def _parse_docx(path: Path) -> list[ParsedSection]:

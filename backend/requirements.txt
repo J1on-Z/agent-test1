@@ -42,6 +42,7 @@ jieba>=0.42.1            # 纯 Python
 
 # ---------- 文档解析 ----------
 pypdf>=5.0               # 纯 Python
+pymupdf>=1.28            # 扫描件 PDF 渲染成图片（OCR 回退用，cp314 轮子自 1.28 起）
 python-docx>=1.1         # 依赖 lxml>=6.0（cp314 轮子自 6.0 起）
 openpyxl>=3.1
 markdown>=3.7

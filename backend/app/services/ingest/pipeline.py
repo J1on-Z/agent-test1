@@ -102,6 +102,10 @@ def run_ingest(job_id: int) -> None:
                 _fail_job(db, job, e.message)
                 return
             total_chars = sum(len(s.text) for s in sections)
+            # 无标题文档（如扫描件）的 title 回退到存储文件名的 UUID stem，
+            # 这里改用用户上传时的原始文件名，避免知识库列表展示一串乱码
+            if title == stored_path.stem:
+                title = document.filename.rsplit(".", 1)[0]
             document.category = title[:50] or None
 
             # ---- 阶段 2：分块 ----

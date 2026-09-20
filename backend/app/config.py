@@ -67,6 +67,12 @@ class Settings(BaseSettings):
     rerank_top_n: int = 5
     rerank_score_threshold: float = 0.35
 
+    # ---------- 扫描件 OCR（无文字层 PDF 自动走多模态识别） ----------
+    ocr_enabled: bool = True
+    ocr_model: str = "qwen3.7-flash"  # 已实测支持图片输入（2026-09-20 验证，与默认 LLM 同款）
+    ocr_dpi: int = 150            # PDF 页渲染分辨率（越高越清晰，也越耗时）
+    ocr_max_pages: int = 50       # 单文档 OCR 页数上限（防误传大扫描件产生高额调用）
+
     # ---------- 检索 ----------
     vector_search_k: int = 10
     bm25_search_k: int = 10
